@@ -1,404 +1,473 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:fillViewport="true"
-    android:scrollbars="none">
+    android:layout_height="match_parent">
 
-    <LinearLayout
+    <!-- ══════════ 标准界面 ══════════ -->
+    <ScrollView
+        android:id="@+id/mainScroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingHorizontal="18dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="28dp">
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
 
-        <!-- ══════════ 状态条 ══════════ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <!-- 连接状态色点 -->
-            <View
-                android:id="@+id/dotStatus"
-                android:layout_width="9dp"
-                android:layout_height="9dp"
-                android:background="@drawable/dot_status" />
-
-            <TextView
-                android:id="@+id/tvConn"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="@string/conn_idle"
-                android:textColor="@color/dim"
-                android:textSize="13sp"
-                tools:text="已连接 · H303" />
-
-            <TextView
-                android:id="@+id/btnProtocol"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="6dp"
-                android:text="@string/action_protocol"
-                android:textColor="@color/accent"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="BLE" />
-        </LinearLayout>
-
-        <!-- ANT/BLE 异常横幅 -->
-        <TextView
-            android:id="@+id/tvAntBanner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/banner_bg"
-            android:padding="11dp"
-            android:textColor="@color/err"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="缺少 ANT 服务，请改用 BLE 模式"
-            tools:visibility="visible" />
-
-        <!-- 数据源诊断（BLE 下显示 RR 单位判定） -->
-        <TextView
-            android:id="@+id/tvDiag"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="monospace"
-            android:textColor="@color/dim"
-            android:textSize="10sp"
-            android:visibility="gone"
-            tools:text="RR 单位：TICK (n=42)"
-            tools:visibility="visible" />
-
-        <!-- ══════════ 心率主卡 ══════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/card_hero"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="20dp"
-            android:paddingBottom="18dp">
+            android:paddingHorizontal="18dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="28dp">
 
-            <!-- 心率数字 + 单位 -->
+            <!-- 顶部状态条：连接 · 时长 · 诊断 · 设置 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
+                android:minHeight="48dp"
                 android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/tvHr"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-thin"
-                    android:includeFontPadding="false"
-                    android:letterSpacing="-0.04"
-                    android:text="--"
-                    android:textColor="@color/accent"
-                    android:textSize="104sp"
-                    android:textStyle="normal" />
+                <View
+                    android:id="@+id/dotStatus"
+                    android:layout_width="9dp"
+                    android:layout_height="9dp"
+                    android:background="@drawable/dot_status" />
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/tvConn"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
+                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="@string/unit_bpm"
-                        android:textColor="@color/text"
-                        android:textSize="15sp" />
-
-                    <TextView
-                        android:id="@+id/tvAvgHr"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="@string/avg_placeholder"
-                        android:textColor="@color/dim"
-                        android:textSize="12sp"
-                        tools:text="均 68" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- RR 实时曲线 -->
-            <com.rrlogger.ui.widget.RrSparklineView
-                android:id="@+id/sparkline"
-                android:layout_width="match_parent"
-                android:layout_height="92dp"
-                android:layout_marginTop="10dp" />
-
-            <!-- RR 数值 + 会话状态 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/tvRr"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/rr_placeholder"
-                    android:textColor="@color/text"
-                    android:textSize="17sp"
-                    tools:text="1024 ms" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1" />
-
-                <TextView
-                    android:id="@+id/tvStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/status_idle"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/conn_idle"
                     android:textColor="@color/dim"
                     android:textSize="13sp"
-                    android:textStyle="bold"
-                    tools:text="进行中 · REST" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ══════════ 统计条 ══════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/card"
-            android:baselineAligned="false"
-            android:orientation="horizontal"
-            android:paddingVertical="14dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvBeats"
-                    style="@style/StatValue"
-                    android:text="0" />
-
-                <TextView
-                    style="@style/StatCaption"
-                    android:text="@string/cap_beats" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="match_parent"
-                android:background="@color/stroke" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvDropped"
-                    style="@style/StatValue"
-                    android:text="0" />
-
-                <TextView
-                    style="@style/StatCaption"
-                    android:text="@string/cap_dropped" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="match_parent"
-                android:background="@color/stroke" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
+                    tools:text="已连接 · H303" />
 
                 <TextView
                     android:id="@+id/tvDuration"
-                    style="@style/StatValue"
-                    android:text="--:--" />
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="2dp"
+                    android:fontFamily="monospace"
+                    android:includeFontPadding="false"
+                    android:text="@string/duration_placeholder"
+                    android:textColor="@color/text"
+                    android:textSize="17sp"
+                    tools:text="21:34" />
 
-                <TextView
-                    style="@style/StatCaption"
-                    android:text="@string/cap_duration" />
+                <ImageButton
+                    android:id="@+id/btnInfo"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/cd_info"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_info"
+                    app:tint="@color/dim" />
+
+                <ImageButton
+                    android:id="@+id/btnSettings"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/cd_settings"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/dim" />
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- ══════════ 数据质量提示 ══════════ -->
-        <LinearLayout
-            android:id="@+id/qualityCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/card"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="12dp">
+            <!-- ANT/BLE 异常横幅 -->
+            <TextView
+                android:id="@+id/tvAntBanner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/banner_bg"
+                android:padding="11dp"
+                android:textColor="@color/err"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:text="缺少 ANT 服务，请改用 BLE 模式"
+                tools:visibility="visible" />
 
-            <View
-                android:id="@+id/dotQuality"
-                android:layout_width="7dp"
-                android:layout_height="7dp"
-                android:background="@drawable/dot_status" />
+            <!-- ══════════ 心率主卡 ══════════ -->
+            <LinearLayout
+                android:id="@+id/heroCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/card_hero"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="18dp">
+
+                <!-- 心率数字 + 单位 + 均值胶囊 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvHr"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-thin"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="-0.04"
+                        android:text="@string/hr_placeholder"
+                        android:textColor="@color/accent"
+                        android:textSize="104sp"
+                        android:textStyle="normal" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="@string/unit_bpm"
+                            android:textColor="@color/text"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvAvgHr"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/bg_pill"
+                            android:paddingHorizontal="9dp"
+                            android:paddingVertical="4dp"
+                            android:text="@string/avg_placeholder"
+                            android:textColor="@color/dim"
+                            android:textSize="11sp"
+                            tools:text="均 68" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- RR 实时曲线 -->
+                <com.rrlogger.ui.widget.RrSparklineView
+                    android:id="@+id/sparkline"
+                    android:layout_width="match_parent"
+                    android:layout_height="92dp"
+                    android:layout_marginTop="10dp" />
+
+                <!-- RR 数值 + 会话状态 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvRr"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/rr_placeholder"
+                        android:textColor="@color/text"
+                        android:textSize="17sp"
+                        tools:text="1024 ms" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/status_idle"
+                        android:textColor="@color/dim"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        tools:text="进行中 · REST" />
+                </LinearLayout>
+
+                <!-- 拍数 / 丢弃（合并成一行） -->
+                <TextView
+                    android:id="@+id/tvMetrics"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp"
+                    tools:text="1542 拍 · 丢 3" />
+
+                <!-- 数据质量（呼吸灯标签） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/dotQuality"
+                        android:layout_width="7dp"
+                        android:layout_height="7dp"
+                        android:background="@drawable/dot_status" />
+
+                    <TextView
+                        android:id="@+id/tvQuality"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:text="@string/quality_idle"
+                        android:textColor="@color/dim"
+                        android:textSize="11sp"
+                        tools:text="数据质量良好 · 丢弃率 0.2%" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ══════════ 主操作 ══════════ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStart"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_weight="2"
+                    android:text="@string/action_start"
+                    android:textSize="15sp"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStop"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="2"
+                    android:text="@string/action_stop"
+                    android:textSize="15sp"
+                    app:cornerRadius="16dp"
+                    app:strokeColor="@color/stroke" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMark"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1.2"
+                    android:text="@string/action_mark"
+                    android:textSize="15sp"
+                    app:cornerRadius="16dp"
+                    app:strokeColor="@color/stroke" />
+            </LinearLayout>
+
+            <!-- ══════════ 次级操作（触控区 48dp） ══════════ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnConnect"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/action_connect"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExport"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/action_export_short"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnHistory"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/action_history_short"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRefreshAnt"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/action_recheck_short"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- ══════════ 最近 10 拍（默认折叠） ══════════ -->
+            <TextView
+                android:id="@+id/tvRecentHeader"
+                style="@style/SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="48dp"
+                android:text="@string/recent_expand"
+                tools:text="最近 10 拍　▸" />
 
             <TextView
-                android:id="@+id/tvQuality"
+                android:id="@+id/tvRecent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/card"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="5dp"
+                android:padding="14dp"
+                android:text="@string/empty_recent"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <!-- 页脚：版本与承诺 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:text="@string/footer_hint"
+                android:textColor="@color/dim"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- ══════════ 专注模式（全屏） ══════════ -->
+    <LinearLayout
+        android:id="@+id/focusRoot"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg"
+        android:orientation="vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="20dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <!-- 顶部小字：时长 · 结束 · 退出 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvFocusDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="@string/duration_placeholder"
+                android:textColor="@color/dim"
+                android:textSize="15sp"
+                tools:text="21:34" />
+
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:text="@string/quality_idle"
-                android:textColor="@color/dim"
-                android:textSize="12sp"
-                tools:text="数据质量良好 · 丢弃率 0.2%" />
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFocusStop"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:minWidth="64dp"
+                android:text="@string/focus_stop"
+                android:textColor="@color/err"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExitFocus"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="@string/focus_exit"
+                android:textColor="@color/accent"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- ══════════ 主操作 ══════════ -->
+        <!-- 居中：巨大心率 + 均值 -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnStart"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_weight="2"
-                android:text="@string/action_start"
-                android:textSize="15sp"
-                app:cornerRadius="14dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnStop"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_marginStart="10dp"
-                android:layout_weight="2"
-                android:text="@string/action_stop"
-                android:textSize="15sp"
-                app:cornerRadius="14dp"
-                app:strokeColor="@color/stroke" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnMark"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1.2"
-                android:text="@string/action_mark"
-                android:textSize="15sp"
-                app:cornerRadius="14dp"
-                app:strokeColor="@color/stroke" />
-        </LinearLayout>
-
-        <!-- ══════════ 次级操作 ══════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnConnect"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/action_connect"
-                android:textColor="@color/dim"
-                android:textSize="12sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExport"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/action_export_short"
-                android:textColor="@color/dim"
-                android:textSize="12sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnHistory"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/action_history_short"
-                android:textColor="@color/dim"
-                android:textSize="12sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnRefreshAnt"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="@string/action_recheck_short"
-                android:textColor="@color/dim"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- ══════════ 最近 5 拍 ══════════ -->
-        <TextView
-            style="@style/SectionTitle"
-            android:text="@string/title_recent" />
-
-        <TextView
-            android:id="@+id/tvRecent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/card"
-            android:fontFamily="monospace"
-            android:lineSpacingExtra="5dp"
-            android:padding="14dp"
-            android:text="@string/empty_recent"
-            android:textColor="@color/text"
-            android:textSize="12sp" />
-
-        <!-- 页脚：版本与承诺 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:gravity="center"
-            android:text="@string/footer_hint"
-            android:textColor="@color/dim"
-            android:textSize="10sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvFocusHr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:autoSizeMaxTextSize="180sp"
+                android:autoSizeMinTextSize="72sp"
+                android:autoSizeStepGranularity="4sp"
+                android:autoSizeTextType="uniform"
+                android:fontFamily="sans-serif-thin"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.04"
+                android:maxLines="1"
+                android:text="@string/hr_placeholder"
+                android:textColor="@color/accent"
+                tools:text="72" />
+
+            <TextView
+                android:id="@+id/tvFocusAvg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/avg_placeholder"
+                android:textColor="@color/dim"
+                android:textSize="14sp"
+                tools:text="均 68" />
+        </LinearLayout>
+
+        <!-- 底部：大号打点圆钮 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="6dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFocusMark"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_gravity="center"
+                android:text="@string/action_mark"
+                android:textSize="16sp"
+                app:cornerRadius="48dp" />
+        </FrameLayout>
     </LinearLayout>
-</ScrollView>
+</FrameLayout>

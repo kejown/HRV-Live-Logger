@@ -2,10 +2,15 @@ package com.rrlogger.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.animation.ObjectAnimator
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.WindowManager
+import android.widget.CheckBox
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -15,13 +20,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.rrlogger.source.HeartRateManager
-import com.rrlogger.source.HeartRateSource
+import com.rrlogger.R
 import com.rrlogger.data.Label
 import com.rrlogger.data.Session
-import com.rrlogger.R
-import com.rrlogger.service.RecordingService
 import com.rrlogger.databinding.ActivityMainBinding
+import com.rrlogger.service.RecordingService
+import com.rrlogger.source.HeartRateManager
+import com.rrlogger.source.HeartRateSource
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -33,6 +38,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val vm: MainViewModel by viewModels()
 
+    private lateinit var prefs: DisplayPrefs
+
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     private val dateFmt = SimpleDateFormat("MM-dd HH:mm", Locale.US)
 
@@ -40,6 +47,13 @@ class MainActivity : AppCompatActivity() {
     private var lastRenderedHr = 0
     private var lastRenderedBeats = 0
     private var lastRenderedSessionId: Long? = null
+
+    /** 专注模式与"最近拍数"展开状态。专注模式持久化，展开状态只在本次界面内有效。 */
+    private var focusMode = false
+    private var recentExpanded = false
+
+    /** 数据质量呼吸灯；只在"优秀/良好"时运行，避免整屏都在闪。 */
+    private var qualityPulse: ObjectAnimator? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -53,9 +67,36 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        prefs = DisplayPrefs(this)
+        focusMode = prefs.focusMode
+
         requestRuntimePermissions()
         setupButtons()
+        applyFocusMode(focusMode)
+        applyRecentExpanded(false)
         observe()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 回到前台时补一次渲染：流程只有状态变化才推送，避免时长/质量灯停在旧值。
+        render(vm.uiState.value)
+    }
+
+    override fun onPause() {
+        qualityPulse?.cancel()
+        qualityPulse = null
+        binding.dotQuality.alpha = 1f
+        super.onPause()
+    }
+
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        if (focusMode) {
+            setFocusMode(false, persist = true)
+            return
+        }
+        super.onBackPressed()
     }
 
     // ---------------- 权限 ----------------
@@ -84,48 +125,43 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         binding.btnStart.setOnClickListener {
-            if (!requireAntReady()) return@setOnClickListener
+            if (!requireSourceReady()) return@setOnClickListener
             vm.start(Label.REST)
             vm.connectSensor()
         }
 
-        binding.btnStop.setOnClickListener {
-            vm.stop()
-        }
+        binding.btnStop.setOnClickListener { vm.stop() }
+        binding.btnFocusStop.setOnClickListener { vm.stop() }
 
-        binding.btnMark.setOnClickListener {
-            showLabelPicker()
-        }
+        binding.btnMark.setOnClickListener { showLabelPicker() }
+        binding.btnFocusMark.setOnClickListener { showLabelPicker() }
 
-        binding.btnConnect.setOnClickListener {
-            vm.connectSensor()
-        }
+        binding.btnConnect.setOnClickListener { vm.connectSensor() }
 
-        binding.btnExport.setOnClickListener {
-            vm.exportLatestFinished()
-        }
+        binding.btnExport.setOnClickListener { vm.exportLatestFinished() }
 
         binding.btnRefreshAnt.setOnClickListener {
             vm.checkAnt()
             refreshBanner()
         }
 
-        binding.btnHistory.setOnClickListener {
-            showHistory()
-        }
+        binding.btnHistory.setOnClickListener { showHistory() }
 
-        binding.btnProtocol.setOnClickListener {
-            showProtocolPicker()
-        }
+        binding.btnInfo.setOnClickListener { showInfoDialog() }
+        binding.btnSettings.setOnClickListener { showSettingsDialog() }
+
+        binding.tvRecentHeader.setOnClickListener { applyRecentExpanded(!recentExpanded) }
+
+        binding.btnExitFocus.setOnClickListener { setFocusMode(false, persist = true) }
     }
 
-    /** ANT+ 不可用时禁用开始并给出明确提示，绝不崩（硬约束 5）。 */
-    private fun requireAntReady(): Boolean {
+    /** 数据源不可用时给出明确提示，绝不崩（硬约束 5）。 */
+    private fun requireSourceReady(): Boolean {
         val avail = vm.uiState.value.availability
         if (avail?.available == true) return true
         AlertDialog.Builder(this)
-            .setTitle("ANT+ 不可用")
-            .setMessage(avail?.message ?: "未检测到 ANT+ 环境")
+            .setTitle("数据源不可用")
+            .setMessage(avail?.message ?: "未检测到可用的蓝牙 / ANT+ 环境")
             .setPositiveButton("知道了", null)
             .show()
         return false
@@ -163,6 +199,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLabelPicker() {
+        if (!vm.uiState.value.serviceState.recording) {
+            toast("先开始记录再打点")
+            return
+        }
         val labels = Label.PRESETS.dropLast(1) + "自定义…"
         AlertDialog.Builder(this)
             .setTitle("选择打点标签")
@@ -170,7 +210,7 @@ class MainActivity : AppCompatActivity() {
                 if (which == labels.lastIndex) {
                     promptCustomLabel()
                 } else {
-                    vm.mark(labels[which])
+                    markWithFeedback(labels[which])
                 }
             }
             .show()
@@ -185,10 +225,25 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("确定") { _, _ ->
                 val text = input.text?.toString()?.trim().orEmpty()
-                if (text.isNotEmpty()) vm.mark(text)
+                if (text.isNotEmpty()) markWithFeedback(text)
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /** 打点：先给触觉反馈，再交给服务（Toast 由服务统一发）。 */
+    private fun markWithFeedback(label: String) {
+        haptic()
+        vm.mark(label)
+    }
+
+    private fun haptic() {
+        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            HapticFeedbackConstants.CONFIRM
+        } else {
+            HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        window.decorView.performHapticFeedback(constant)
     }
 
     private fun showHistory() {
@@ -217,15 +272,106 @@ class MainActivity : AppCompatActivity() {
             "均${s.avgHr}bpm  丢${s.droppedCount}  $dur"
     }
 
+    // ---------------- 设置 / 诊断 / 专注 ----------------
+
+    private fun showSettingsDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_settings, null)
+        val rowProtocol = view.findViewById<TextView>(R.id.rowProtocol)
+        val checkFocus = view.findViewById<CheckBox>(R.id.checkFocus)
+        val checkKeepScreen = view.findViewById<CheckBox>(R.id.checkKeepScreen)
+
+        rowProtocol.text = getString(
+            R.string.settings_protocol,
+            vm.uiState.value.serviceState.sourceKind.label
+        )
+        checkFocus.isChecked = focusMode
+        checkKeepScreen.isChecked = prefs.keepScreenOn
+
+        var dialog: AlertDialog? = null
+        rowProtocol.setOnClickListener {
+            dialog?.dismiss()
+            showProtocolPicker()
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.settings_title)
+            .setView(view)
+            .setPositiveButton(R.string.settings_done) { _, _ ->
+                prefs.keepScreenOn = checkKeepScreen.isChecked
+                setFocusMode(checkFocus.isChecked, persist = true)
+                applyKeepScreenOn()
+            }
+            .setNegativeButton("取消", null)
+            .create()
+        dialog.show()
+    }
+
+    private fun showInfoDialog() {
+        val st = vm.uiState.value
+        val s = st.serviceState
+        val diag = s.diag.ifBlank { getString(R.string.diag_empty) }
+        val text = buildString {
+            append("协议：").append(s.sourceKind.label).append('\n')
+            append("连接：").append(connText(s.connState).first).append('\n')
+            append("会话：").append(
+                when {
+                    s.recording -> "记录中 · ${s.label}"
+                    s.sessionId != null -> "已结束 · ${s.label}"
+                    else -> "未开始"
+                }
+            ).append('\n')
+            append("采样：").append(s.totalBeats).append(" 拍 · 丢弃 ").append(s.droppedCount).append('\n')
+            val avail = st.availability
+            if (avail != null) {
+                append("数据源：").append(if (avail.available) "可用" else "不可用").append('\n')
+            }
+            append('\n').append(diag)
+            if (!avail?.message.isNullOrBlank()) {
+                append("\n\n").append(avail?.message)
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.diag_title)
+            .setMessage(text)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    /** 专注模式：隐藏标准界面，只留心率、时长与打点。 */
+    private fun setFocusMode(enabled: Boolean, persist: Boolean) {
+        focusMode = enabled
+        if (persist) prefs.focusMode = enabled
+        applyFocusMode(enabled)
+        render(vm.uiState.value)
+    }
+
+    private fun applyFocusMode(enabled: Boolean) {
+        binding.mainScroll.visibility = if (enabled) View.GONE else View.VISIBLE
+        binding.focusRoot.visibility = if (enabled) View.VISIBLE else View.GONE
+    }
+
+    private fun applyRecentExpanded(expanded: Boolean) {
+        recentExpanded = expanded
+        binding.tvRecentHeader.text =
+            getString(if (expanded) R.string.recent_collapse else R.string.recent_expand)
+        binding.tvRecent.visibility = if (expanded) View.VISIBLE else View.GONE
+    }
+
+    private fun applyKeepScreenOn(recording: Boolean = vm.uiState.value.serviceState.recording) {
+        if (prefs.keepScreenOn && recording) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // ---------------- 观察状态 ----------------
 
     private fun observe() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    vm.uiState.collect { st ->
-                        render(st)
-                    }
+                    vm.uiState.collect { st -> render(st) }
                 }
                 launch {
                     vm.toasts.collect { msg -> toast(msg) }
@@ -257,16 +403,22 @@ class MainActivity : AppCompatActivity() {
         // 无数据时用单个长横线，比 "--" 在超大字号下更干净
         val hrText = if (s.lastHr > 0) s.lastHr.toString() else "\u2014"
         binding.tvHr.text = hrText
+        binding.tvFocusHr.text = hrText
 
         // 心率变化时做一次轻微脉冲，让界面有"在跳"的感觉
         if (s.lastHr > 0 && s.lastHr != lastRenderedHr) {
             lastRenderedHr = s.lastHr
-            pulseHeartRate()
-            binding.tvHr.setTextColor(heartRateColor(s.lastHr))
+            pulseHeartRate(binding.tvHr)
+            pulseHeartRate(binding.tvFocusHr)
+            val color = heartRateColor(s.lastHr)
+            binding.tvHr.setTextColor(color)
+            binding.tvFocusHr.setTextColor(color)
             binding.sparkline.setIntensityColor(s.lastHr)
         } else if (s.lastHr <= 0) {
             lastRenderedHr = 0
-            binding.tvHr.setTextColor(ContextCompat.getColor(this, com.rrlogger.R.color.dim))
+            val dim = ContextCompat.getColor(this, R.color.dim)
+            binding.tvHr.setTextColor(dim)
+            binding.tvFocusHr.setTextColor(dim)
             binding.sparkline.setIntensityColor(0)
         }
 
@@ -274,14 +426,8 @@ class MainActivity : AppCompatActivity() {
 
         // 新拍到达 → 推一个点到曲线
         if (s.totalBeats > lastRenderedBeats && s.lastRrMs > 0) {
-            val delta = s.totalBeats - lastRenderedBeats
             lastRenderedBeats = s.totalBeats
-            if (delta == 1) {
-                binding.sparkline.push(s.lastRrMs)
-            } else {
-                // 一次跳多拍（后台回到前台），只补最后一个点，避免曲线突变
-                binding.sparkline.push(s.lastRrMs)
-            }
+            binding.sparkline.push(s.lastRrMs)
         }
 
         binding.tvStatus.text = when {
@@ -290,18 +436,17 @@ class MainActivity : AppCompatActivity() {
             else -> "未开始"
         }
         binding.tvStatus.setTextColor(
-            ContextCompat.getColor(
-                this,
-                if (s.recording) com.rrlogger.R.color.ok else com.rrlogger.R.color.dim
-            )
+            ContextCompat.getColor(this, if (s.recording) R.color.ok else R.color.dim)
         )
 
-        binding.tvBeats.text = s.totalBeats.toString()
-        binding.tvDropped.text = s.droppedCount.toString()
-        binding.tvAvgHr.text = if (s.avgHr > 0) "均 ${s.avgHr}" else getString(R.string.avg_placeholder)
+        binding.tvMetrics.text = getString(R.string.metrics_format, s.totalBeats, s.droppedCount)
+        binding.tvAvgHr.text =
+            if (s.avgHr > 0) "均 ${s.avgHr}" else getString(R.string.avg_placeholder)
+        binding.tvFocusAvg.text = binding.tvAvgHr.text
 
         binding.btnStart.isEnabled = st.canStart
         binding.btnStop.isEnabled = st.canStop
+        binding.btnFocusStop.isEnabled = st.canStop
 
         // 记录中把「结束记录」提到视觉上层：危险色描边 + 文字变色
         val errColor = ContextCompat.getColor(this, R.color.err)
@@ -315,39 +460,38 @@ class MainActivity : AppCompatActivity() {
             binding.btnStop.setTextColor(dimColor)
         }
         binding.btnMark.isEnabled = s.recording
+        binding.btnFocusMark.isEnabled = s.recording
         binding.btnExport.isEnabled = !st.exporting && st.sessions.isNotEmpty()
         binding.btnExport.text = if (st.exporting) "导出中" else getString(R.string.action_export_short)
-        binding.btnProtocol.text = s.sourceKind.label
 
         renderQuality(s)
         renderConn(s.connState, st.availability?.message)
         renderRecent(st)
         renderDuration()
+        applyKeepScreenOn(s.recording)
     }
 
     @SuppressLint("SetTextI18n")
     private fun renderConn(conn: HeartRateManager.ConnState, antMessage: String?) {
-        val (text, color) = when (conn) {
-            is HeartRateManager.ConnState.Connected -> {
-                "已连接${conn.deviceName?.let { " · $it" } ?: ""}" to com.rrlogger.R.color.ok
-            }
-            is HeartRateManager.ConnState.Searching -> "搜索心率带中…" to com.rrlogger.R.color.warn
-            is HeartRateManager.ConnState.Requesting -> "正在申请连接…" to com.rrlogger.R.color.warn
-            is HeartRateManager.ConnState.Disconnected -> "已断开" to com.rrlogger.R.color.err
-            is HeartRateManager.ConnState.Error -> "错误：${conn.reason}" to com.rrlogger.R.color.err
-            else -> "未连接" to com.rrlogger.R.color.dim
-        }
+        val (text, color) = connText(conn)
         binding.tvConn.text = text
         binding.tvConn.setTextColor(ContextCompat.getColor(this, color))
         tintDot(binding.dotStatus, color)
 
-        val diag = vm.uiState.value.serviceState.diag
-        binding.tvDiag.text = diag
-        binding.tvDiag.visibility = if (diag.isBlank()) View.GONE else View.VISIBLE
-
         val msg = antMessage
         binding.tvAntBanner.text = msg.orEmpty()
         binding.tvAntBanner.visibility = if (msg.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun connText(conn: HeartRateManager.ConnState): Pair<String, Int> = when (conn) {
+        is HeartRateManager.ConnState.Connected -> {
+            "已连接${conn.deviceName?.let { " · $it" } ?: ""}" to R.color.ok
+        }
+        is HeartRateManager.ConnState.Searching -> "搜索心率带中…" to R.color.warn
+        is HeartRateManager.ConnState.Requesting -> "正在申请连接…" to R.color.warn
+        is HeartRateManager.ConnState.Disconnected -> "已断开" to R.color.err
+        is HeartRateManager.ConnState.Error -> "错误：${conn.reason}" to R.color.err
+        else -> "未连接" to R.color.dim
     }
 
     /**
@@ -362,6 +506,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvQuality.text = getString(R.string.quality_idle)
             binding.tvQuality.setTextColor(ContextCompat.getColor(this, R.color.dim))
             tintDot(binding.dotQuality, R.color.dim)
+            updateQualityPulse(active = false)
             return
         }
 
@@ -378,6 +523,28 @@ class MainActivity : AppCompatActivity() {
         binding.tvQuality.text = text
         binding.tvQuality.setTextColor(ContextCompat.getColor(this, colorRes))
         tintDot(binding.dotQuality, colorRes)
+
+        val healthy = verdict.level == QualityAdvisor.Level.EXCELLENT ||
+            verdict.level == QualityAdvisor.Level.GOOD
+        updateQualityPulse(active = healthy && s.recording)
+    }
+
+    /** 绿色呼吸灯：只在数据质量健康且正在记录时运行；其余状态保持常亮。 */
+    private fun updateQualityPulse(active: Boolean) {
+        if (active) {
+            val animator = qualityPulse ?: ObjectAnimator.ofFloat(binding.dotQuality, "alpha", 1f, 0.35f)
+                .apply {
+                    duration = 900
+                    repeatCount = ObjectAnimator.INFINITE
+                    repeatMode = ObjectAnimator.REVERSE
+                }
+                .also { qualityPulse = it }
+            if (!animator.isRunning) animator.start()
+        } else {
+            qualityPulse?.cancel()
+            qualityPulse = null
+            binding.dotQuality.alpha = 1f
+        }
     }
 
     private fun tintDot(v: View, colorRes: Int) {
@@ -390,7 +557,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvRecent.text = "暂无数据"
             return
         }
-        // 最近 5 条，最新的在上
+        // 最新在上
         binding.tvRecent.text = rows.joinToString("\n") { r ->
             val t = timeFmt.format(Date(r.timestampMs))
             "$t   RR ${r.rrMs} ms   HR ${r.heartRate} bpm"
@@ -401,13 +568,16 @@ class MainActivity : AppCompatActivity() {
     private fun renderDuration() {
         val s = vm.uiState.value.serviceState
         if (!s.recording || s.sessionStartMs <= 0L) {
-            if (!s.recording) binding.tvDuration.text = "--:--:--"
+            binding.tvDuration.text = "--:--:--"
+            binding.tvFocusDuration.text = "--:--:--"
             return
         }
         val sec = max(0L, (System.currentTimeMillis() - s.sessionStartMs) / 1000)
-        binding.tvDuration.text = String.format(
+        val text = String.format(
             Locale.US, "%02d:%02d:%02d", sec / 3600, (sec % 3600) / 60, sec % 60
         )
+        binding.tvDuration.text = text
+        binding.tvFocusDuration.text = text
     }
 
     private fun refreshBanner() {
@@ -415,8 +585,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 一次轻微的缩放脉冲，跟随心率刷新节奏。 */
-    private fun pulseHeartRate() {
-        val v = binding.tvHr
+    private fun pulseHeartRate(v: View) {
         v.animate().cancel()
         v.animate()
             .scaleX(1.055f).scaleY(1.055f)

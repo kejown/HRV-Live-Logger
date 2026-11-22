@@ -45,7 +45,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         val antUsable: Boolean get() = availability?.available == true
         val canStart: Boolean
-            get() = antUsable && !serviceState.recording && serviceState.sessionId == null
+            get() = StartPolicy.canStart(antUsable, serviceState.recording)
         val canStop: Boolean get() = serviceState.recording
     }
 

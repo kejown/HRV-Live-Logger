@@ -10,27 +10,42 @@
     <string name="status_idle">未开始</string>
 
     <!-- 统计块 -->
-    <string name="cap_beats">已记录拍数</string>
-    <string name="cap_dropped">丢弃</string>
-    <string name="cap_duration">时长</string>
+    <string name="metrics_format">%1$d 拍 · 丢 %2$d</string>
 
     <!-- 按钮 -->
     <string name="action_connect">连接心率带</string>
     <string name="action_start">开始记录</string>
     <string name="action_stop">结束记录</string>
     <string name="action_mark">打点</string>
-    <string name="action_protocol">协议</string>
     <string name="action_export_short">导出</string>
     <string name="action_history_short">历史</string>
     <string name="action_recheck_short">重检</string>
-    <string name="avg_placeholder">均 --</string>
-    <string name="rr_placeholder">-- ms</string>
+    <string name="avg_placeholder">均 —</string>
+    <string name="rr_placeholder">— ms</string>
+    <string name="duration_placeholder">--:--:--</string>
+    <string name="hr_placeholder">—</string>
     <string name="quality_idle">开始记录后显示数据质量</string>
     <string name="footer_hint">逐拍 R-R 记录 · 导出可直接导入 Kubios HRV</string>
 
     <!-- 最近 RR -->
-    <string name="title_recent">最近 10 拍</string>
+    <string name="recent_expand">最近 10 拍　▸</string>
+    <string name="recent_collapse">最近 10 拍　▾</string>
     <string name="empty_recent">暂无数据</string>
+
+    <!-- 顶栏图标 / 对话框 -->
+    <string name="cd_info">数据源诊断</string>
+    <string name="cd_settings">显示与专注设置</string>
+    <string name="settings_title">显示与专注</string>
+    <string name="settings_protocol">切换协议（当前 %1$s）</string>
+    <string name="settings_focus">专注模式：只保留心率、时长与打点</string>
+    <string name="settings_keep_screen">记录时保持屏幕常亮</string>
+    <string name="settings_done">完成</string>
+    <string name="diag_title">数据源诊断</string>
+    <string name="diag_empty">暂无诊断信息（连接后显示 RR 单位判定）</string>
+
+    <!-- 专注模式 -->
+    <string name="focus_exit">退出专注</string>
+    <string name="focus_stop">结束</string>
 
     <!-- 通知 -->
     
