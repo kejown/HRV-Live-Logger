@@ -139,6 +139,19 @@ class RecordingService : Service() {
         notifier.createChannel()
         observeAnt()
 
+        // 未记录时也把实时心率推给界面：只想"打开看一眼心率"的人不必先开记录。
+        // 记录期间由 startCollecting 负责推送，这里用 recording 判断避免两边打架。
+        scope.launch {
+            hr.beats.collect { beat ->
+                if (!_uiState.value.recording) {
+                    _uiState.value = _uiState.value.copy(
+                        lastRrMs = beat.rrMs,
+                        lastHr = beat.heartRate
+                    )
+                }
+            }
+        }
+
         scope.launch {
             // 冷启动即恢复：如果有未结束会话，直接接着写
             val unfinished = repo.findUnfinishedSession()

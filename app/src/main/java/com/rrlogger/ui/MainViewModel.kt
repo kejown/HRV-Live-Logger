@@ -125,6 +125,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(
             availability = s.heartRateManager().checkAvailability()
         )
+        // 如果打开 App 时权限已经就绪，连接请求会在这里落地。
+        tryAutoConnect()
+    }
+
+    private var autoConnectRequested = false
+
+    /**
+     * 权限就绪后调用：服务可能还没绑定，先挂起；绑定成功或进程级实例可用时自动连接。
+     * 连接后即使不开始记录，服务也会把实时心率推给界面（见 RecordingService 的监测协程）。
+     */
+    fun connectWhenReady() {
+        autoConnectRequested = true
+        tryAutoConnect()
+    }
+
+    private fun tryAutoConnect() {
+        if (!autoConnectRequested) return
+        val svc = service ?: RecordingService.instance ?: return
+        autoConnectRequested = false
+        svc.heartRateManager().connect()
     }
 
     fun checkAnt() {

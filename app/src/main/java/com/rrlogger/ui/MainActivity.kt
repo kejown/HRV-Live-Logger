@@ -3,9 +3,13 @@ package com.rrlogger.ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.animation.ObjectAnimator
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.util.TypedValue
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
@@ -46,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     /** 上一次渲染的心率/拍数，用于判断是否需要触发动画与曲线推送。 */
     private var lastRenderedHr = 0
     private var lastRenderedBeats = 0
+    private var lastRenderedRr = 0
     private var lastRenderedSessionId: Long? = null
 
     /** 专注模式与"最近拍数"展开状态。专注模式持久化，展开状态只在本次界面内有效。 */
@@ -55,11 +60,36 @@ class MainActivity : AppCompatActivity() {
     /** 数据质量呼吸灯；只在"优秀/良好"时运行，避免整屏都在闪。 */
     private var qualityPulse: ObjectAnimator? = null
 
+    /** 启动/按钮触发的权限动作。 */
+    private enum class PendingAction { CONNECT, START }
+
+    private var pendingAction: PendingAction? = null
+    private var pendingUserInitiated = false
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
-        // 权限结果不影响主流程；通知被拒时前台服务仍能跑（仅无横幅）
-        refreshBanner()
+    ) { result ->
+        val action = pendingAction
+        val userInitiated = pendingUserInitiated
+        pendingAction = null
+        pendingUserInitiated = false
+
+        val denied = result.filterValues { granted -> !granted }.keys
+        // 权限结果回来后重算可用性：之前可能是"无权限 → 不可用"的假状态。
+        vm.checkAnt()
+
+        // 通知被拒不影响记录；连接阶段的身体传感器被拒也只影响"health 前台服务"，
+        // 不该拦住"只看实时心率"。真正会挡住动作的只有蓝牙/定位（以及记录时的身体传感器）。
+        val blocking = denied.filter { permission ->
+            permission != Manifest.permission.POST_NOTIFICATIONS &&
+                !(action == PendingAction.CONNECT && permission == Manifest.permission.BODY_SENSORS)
+        }
+        if (blocking.isNotEmpty()) {
+            if (userInitiated) showPermissionRationale(blocking)
+            refreshBanner()
+            return@registerForActivityResult
+        }
+        if (action != null) perform(action, userInitiated)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,11 +100,12 @@ class MainActivity : AppCompatActivity() {
         prefs = DisplayPrefs(this)
         focusMode = prefs.focusMode
 
-        requestRuntimePermissions()
         setupButtons()
         applyFocusMode(focusMode)
         applyRecentExpanded(false)
         observe()
+        // 打开即连接：先按标准系统对话框要权限，授权后自动扫描心率带并实时显示。
+        requestFor(PendingAction.CONNECT, userInitiated = false)
     }
 
     override fun onResume() {
@@ -101,33 +132,82 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------- 权限 ----------------
 
-    private fun requestRuntimePermissions() {
-        val needed = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            needed += Manifest.permission.POST_NOTIFICATIONS
-            needed += Manifest.permission.BLUETOOTH_SCAN
-            needed += Manifest.permission.BLUETOOTH_CONNECT
-            // API 34 起 FOREGROUND_SERVICE_TYPE_HEALTH 强制要求 BODY_SENSORS
-            needed += Manifest.permission.BODY_SENSORS
-        } else {
-            needed += Manifest.permission.ACCESS_FINE_LOCATION
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                needed += Manifest.permission.BODY_SENSORS
-            }
+    private fun requestFor(action: PendingAction, userInitiated: Boolean) {
+        val missing = missingPermissions(action)
+        if (missing.isEmpty()) {
+            perform(action, userInitiated)
+            return
         }
-        val missing = needed.filter {
+        pendingAction = action
+        pendingUserInitiated = userInitiated
+        permissionLauncher.launch(missing.toTypedArray())
+    }
+
+    /**
+     * 只请求当前动作真正需要的权限：
+     *  - 连接：蓝牙（12+ 为 SCAN/CONNECT，12 以下为定位）+ BODY_SENSORS（34 的 health 前台服务要用）；
+     *  - 开始记录：再补通知权限。
+     * 不在启动时把通知、定位、蓝牙一次性全要一遍。
+     */
+    private fun missingPermissions(action: PendingAction): List<String> {
+        val wanted = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            wanted += Manifest.permission.BLUETOOTH_SCAN
+            wanted += Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            wanted += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            wanted += Manifest.permission.BODY_SENSORS
+        }
+        if (action == PendingAction.START && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            wanted += Manifest.permission.POST_NOTIFICATIONS
+        }
+        return wanted.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
+    }
+
+    private fun perform(action: PendingAction, userInitiated: Boolean) {
+        when (action) {
+            PendingAction.CONNECT -> {
+                if (userInitiated && !requireSourceReady()) return
+                vm.connectWhenReady()
+            }
+            PendingAction.START -> {
+                if (!requireSourceReady()) return
+                vm.start(Label.REST)
+                vm.connectWhenReady()
+            }
+        }
+    }
+
+    private fun showPermissionRationale(denied: Collection<String>) {
+        val what = when {
+            denied.any { it.contains("BLUETOOTH") || it.contains("LOCATION") } -> "蓝牙"
+            denied.any { it.contains("BODY_SENSORS") } -> "身体传感器"
+            else -> "通知"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("需要${what}权限")
+            .setMessage("没有${what}权限无法连接心率带并实时显示心率，可以到系统设置里手动开启。")
+            .setPositiveButton("去设置") { _, _ ->
+                startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", packageName, null)
+                    )
+                )
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     // ---------------- 交互 ----------------
 
     private fun setupButtons() {
         binding.btnStart.setOnClickListener {
-            if (!requireSourceReady()) return@setOnClickListener
-            vm.start(Label.REST)
-            vm.connectSensor()
+            requestFor(PendingAction.START, userInitiated = true)
         }
 
         binding.btnStop.setOnClickListener { vm.stop() }
@@ -136,7 +216,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnMark.setOnClickListener { showLabelPicker() }
         binding.btnFocusMark.setOnClickListener { showLabelPicker() }
 
-        binding.btnConnect.setOnClickListener { vm.connectSensor() }
+        binding.btnConnect.setOnClickListener {
+            requestFor(PendingAction.CONNECT, userInitiated = true)
+        }
 
         binding.btnExport.setOnClickListener { vm.exportLatestFinished() }
 
@@ -398,12 +480,13 @@ class MainActivity : AppCompatActivity() {
             lastRenderedSessionId = s.sessionId
             binding.sparkline.clear()
             lastRenderedBeats = 0
+            lastRenderedRr = 0
         }
 
         // 无数据时用单个长横线，比 "--" 在超大字号下更干净
         val hrText = if (s.lastHr > 0) s.lastHr.toString() else "\u2014"
         binding.tvHr.text = hrText
-        binding.tvFocusHr.text = hrText
+        setFocusHr(hrText)
 
         // 心率变化时做一次轻微脉冲，让界面有"在跳"的感觉
         if (s.lastHr > 0 && s.lastHr != lastRenderedHr) {
@@ -422,17 +505,26 @@ class MainActivity : AppCompatActivity() {
             binding.sparkline.setIntensityColor(0)
         }
 
-        binding.tvRr.text = if (s.lastRrMs > 0) "${s.lastRrMs} ms" else "-- ms"
+        binding.tvRr.text = if (s.lastRrMs > 0) "${s.lastRrMs} ms" else getString(R.string.rr_placeholder)
 
-        // 新拍到达 → 推一个点到曲线
-        if (s.totalBeats > lastRenderedBeats && s.lastRrMs > 0) {
+        // 新拍到达 → 推一个点到曲线。
+        // 记录中按拍数判断；未记录时的"实时监测"没有会话拍数，则按 RR 值变化判断。
+        val beatAdvanced = if (s.recording) {
+            s.totalBeats > lastRenderedBeats
+        } else {
+            s.lastRrMs > 0 && s.lastRrMs != lastRenderedRr
+        }
+        if (beatAdvanced && s.lastRrMs > 0) {
             lastRenderedBeats = s.totalBeats
+            lastRenderedRr = s.lastRrMs
             binding.sparkline.push(s.lastRrMs)
         }
 
         binding.tvStatus.text = when {
             s.recording -> "进行中 · ${s.label}"
-            s.sessionId != null -> "已结束 · ${s.label}"
+            s.sessionId != null && s.connState is HeartRateManager.ConnState.Connected ->
+                "已结束 · ${s.label}"
+            s.connState is HeartRateManager.ConnState.Connected -> "监测中 · 未记录"
             else -> "未开始"
         }
         binding.tvStatus.setTextColor(
@@ -582,6 +674,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshBanner() {
         render(vm.uiState.value)
+    }
+
+    /** 专注模式心率：按位数换字号，避免 3 位数被裁掉、2 位数又显得不够大。 */
+    private fun setFocusHr(text: String) {
+        binding.tvFocusHr.text = text
+        val sizeSp = if (text.length >= 3) 112f else 150f
+        binding.tvFocusHr.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
     }
 
     /** 一次轻微的缩放脉冲，跟随心率刷新节奏。 */

@@ -10,9 +10,9 @@
 | 项 | v5 | v6 |
 |---|---|---|
 | 单元测试 | 79，0 失败 | **84，0 失败** |
-| lint | 0 error / 16 warning | **0 error / 9 warning** |
-| `assembleDebug` | 6.29 MB | **6.03 MB** |
-| APK sha256 | `9C679AAC…3F6A6` | `A9CA9AEB…B0916` |
+| lint | 0 error / 16 warning | **0 error / 10 warning** |
+| `assembleDebug` | 6.29 MB | **6.02 MB**（versionCode 2 / versionName 1.1） |
+| APK sha256 | `9C679AAC…3F6A6` | `98E289A6…91A48` |
 
 真机视觉与触感**未验证**（本机 `adb devices` 仍为空）。
 
@@ -39,6 +39,28 @@
 8. **记录时保持屏幕常亮**：设置里可开，只在记录中生效（`FLAG_KEEP_SCREEN_ON`），停止后立即清除。
 9. **未连接也能开始记录**：`StartPolicy` 不再要求已连接——`RecordingService.startSession()`
    本来就会主动 `connect()`，断线重连是服务职责；数据源整体不可用（无蓝牙/无权限）时仍拦截并提示。
+
+## 装机反馈修复（同一 v6 分支，versionCode 2 / versionName 1.1）
+
+首版装到手机后暴露了三个问题，已在同一分支修复：
+
+1. **专注模式看不到大心率**
+   `tvFocusHr` 用了 `autoSizeTextType="uniform"` + `layout_height="wrap_content"`，
+   在手机上被测量成 0 高，整块区域只剩"均 82"。改为固定字号、按位数切换：
+   2 位数 150sp，3 位数 112sp（`setFocusHr()`），不再依赖 autoSize。
+2. **权限流程**
+   启动时只请求"连接"真正需要的权限：蓝牙（12+ 为 SCAN/CONNECT，12 以下为定位）+ BODY_SENSORS；
+   通知权限推迟到"开始记录"；权限结果回来后重新计算数据源可用性，不再因为"还没授权"显示
+   "数据源不可用"。拒绝时给"去设置"入口；只有蓝牙/定位（以及记录时的身体传感器）会拦住动作，
+   通知被拒不影响记录。
+3. **打开即连接、未记录也显示实时心率**
+   `MainViewModel.connectWhenReady()` 在权限就绪后连接（服务未绑定时挂起，绑定后落地）；
+   `RecordingService` 新增监测协程消费 `hr.beats`，未记录时把 `lastHr/lastRrMs` 推给界面。
+   记录时仍由 `startCollecting` 走 `beatChannel` 逐拍落库，两条通道互不双写。
+   状态文案新增"监测中 · 未记录"，波形在未记录时按 RR 值变化推进。
+
+副作用：打开 App 就会扫描蓝牙（这是"打开即可看心率"的代价）；如果只想导出历史，
+可以等连接搜索超时或直接操作导出，不影响已有数据。
 
 ## 交互变化（用户能感知）
 

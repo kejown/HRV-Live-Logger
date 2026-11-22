@@ -1,9 +1,10 @@
 # PC 端接手说明（PC-HANDOFF）
 
 > **v6 提示（2026-11-22）**：本目录已完成 UI 设计文档的 **P0 + P2**——修复"第二段不能开始"、
-> 顶栏/统计降噪、最近拍折叠、专注模式、记录期常亮、未连接可开始。单元测试 84 个 0 失败，
-> lint 0 error / 9 warning。P1 视觉（主色/字体/区间条/波形光晕）与 Lap 数据模型**未做**。
-> 详见 [CHANGES-v6.md](CHANGES-v6.md) 与 [VERSIONS.md](VERSIONS.md)。
+> 顶栏/统计降噪、最近拍折叠、专注模式、记录期常亮、未连接可开始。装机后修了专注模式心率不显示、
+> 权限按动作申请、打开即连接并实时显示心率（versionCode 2 / versionName 1.1）。
+> 单元测试 84 个 0 失败，lint 0 error / 10 warning。P1 视觉（主色/字体/区间条/波形光晕）与
+> Lap 数据模型**未做**。详见 [CHANGES-v6.md](CHANGES-v6.md) 与 [VERSIONS.md](VERSIONS.md)。
 > 下文描述的 v4 状态与设计不变量仍然有效。
 
 这份文档是给**在 PC 上继续优化这个工程的人 / dsh 会话**看的。
