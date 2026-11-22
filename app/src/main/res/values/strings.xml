@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">R-R Logger</string>
+
+    <!-- 标题栏 -->
+    <string name="conn_idle">未连接</string>
+
+    <!-- 单位 / 说明 -->
+    <string name="unit_bpm">bpm</string>
+    <string name="status_idle">未开始</string>
+
+    <!-- 统计块 -->
+    <string name="cap_beats">已记录拍数</string>
+    <string name="cap_dropped">丢弃</string>
+    <string name="cap_duration">时长</string>
+
+    <!-- 按钮 -->
+    <string name="action_connect">连接心率带</string>
+    <string name="action_start">开始记录</string>
+    <string name="action_stop">结束记录</string>
+    <string name="action_mark">打点</string>
+    <string name="action_protocol">协议</string>
+    <string name="action_export_short">导出</string>
+    <string name="action_history_short">历史</string>
+    <string name="action_recheck_short">重检</string>
+    <string name="avg_placeholder">均 --</string>
+    <string name="rr_placeholder">-- ms</string>
+    <string name="quality_idle">开始记录后显示数据质量</string>
+    <string name="footer_hint">逐拍 R-R 记录 · 导出可直接导入 Kubios HRV</string>
+
+    <!-- 最近 RR -->
+    <string name="title_recent">最近 10 拍</string>
+    <string name="empty_recent">暂无数据</string>
+
+    <!-- 通知 -->
+    
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF0E1116</color>
+    <color name="card_bg">#FF171B22</color>
+    <color name="card_hero">#FF12161D</color>
+    <color name="text">#FFE8ECF1</color>
+    <color name="dim">#FF8A93A0</color>
+    <color name="accent">#FFFF4D5E</color>
+    <color name="ok">#FF33D69F</color>
+    <color name="warn">#FFFFC145</color>
+    <color name="err">#FFFF6B6B</color>
+    <color name="banner">#1FFF6B6B</color>
+    <color name="stroke">#FF262B33</color>
+</resources>

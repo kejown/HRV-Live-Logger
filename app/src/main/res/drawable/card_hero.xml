@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 心率主卡：比普通卡片更深、圆角更大，并在顶部叠一层极淡的主色辉光 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_hero" />
+            <corners android:radius="22dp" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/stroke" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#1AFF4D5E"
+                android:endColor="#00FF4D5E" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+</layer-list>
