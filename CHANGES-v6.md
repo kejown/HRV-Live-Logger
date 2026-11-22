@@ -11,8 +11,8 @@
 |---|---|---|
 | 单元测试 | 79，0 失败 | **84，0 失败** |
 | lint | 0 error / 16 warning | **0 error / 10 warning** |
-| `assembleDebug` | 6.29 MB | **6.02 MB**（versionCode 2 / versionName 1.1） |
-| APK sha256 | `9C679AAC…3F6A6` | `98E289A6…91A48` |
+| `assembleDebug` | 6.29 MB | **6.02 MB**（versionCode 3 / versionName 1.2） |
+| APK sha256 | `9C679AAC…3F6A6` | `3F5CB786…D6BD3` |
 
 真机视觉与触感**未验证**（本机 `adb devices` 仍为空）。
 
@@ -61,6 +61,13 @@
 
 副作用：打开 App 就会扫描蓝牙（这是"打开即可看心率"的代价）；如果只想导出历史，
 可以等连接搜索超时或直接操作导出，不影响已有数据。
+
+### 装机体感微调（versionCode 3 / versionName 1.2）
+
+- **专注模式大心率水平居中**：`tvFocusHr` 是 `match_parent` 宽度，文字默认靠左；加 `gravity="center"`，
+  与下方"均 xx"一起在屏幕中线上。
+- **平均心率改亮橙色**：新增 `@color/orange`（`#FFA726`），主界面均值胶囊与专注模式"均 xx"
+  统一使用；心率主数字仍按区间变色，两者不抢。
 
 ## 交互变化（用户能感知）
 

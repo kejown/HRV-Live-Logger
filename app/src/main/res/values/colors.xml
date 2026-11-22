@@ -6,6 +6,7 @@
     <color name="text">#FFE8ECF1</color>
     <color name="dim">#FF8A93A0</color>
     <color name="accent">#FFFF4D5E</color>
+    <color name="orange">#FFFFA726</color>
     <color name="ok">#FF33D69F</color>
     <color name="warn">#FFFFC145</color>
     <color name="err">#FFFF6B6B</color>
