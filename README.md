@@ -231,5 +231,3 @@ adb logcat -s AntPlusManager:D SdkAntSource:D RRLogger:D
 4. 数据隐私：本软件采用本地存储机制，不收集、不上传您的个人数据（除非您主动导出）。请妥善保管您导出的 RR 文本文件。
 
 ```
-
-***
