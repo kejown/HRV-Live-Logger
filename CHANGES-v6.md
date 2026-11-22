@@ -14,6 +14,9 @@
 | `assembleDebug` | 6.29 MB | **6.02 MB**（versionCode 3 / versionName 1.2） |
 | APK sha256 | `9C679AAC…3F6A6` | `3F5CB786…D6BD3` |
 
+预编译 APK 直接放在仓库根目录：`RRLogger-v6.2-debug.apk`（versionCode 3 / versionName 1.2），
+`adb install -r` 即可覆盖安装；debug 签名，换机器重新构建会换 key。
+
 真机视觉与触感**未验证**（本机 `adb devices` 仍为空）。
 
 ## P0：结构降噪与可用性
