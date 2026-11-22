@@ -1,4 +1,4 @@
-# R-R Logger
+#HRV Live Logger
 一个用于实时心率和 RR 间期监测的安卓 App，专为软件生态不完善的心率带设计，支持直接导出至 Kubios HRV
 
 ## 0. 支持两种协议
