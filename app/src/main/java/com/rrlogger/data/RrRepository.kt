@@ -57,6 +57,10 @@ class RrRepository(
     suspend fun listRrMs(sessionId: Long): List<Int> =
         withContext(io) { rrDao.listRrBySession(sessionId) }
 
+    /** 导出用的分页读取：一次只取 [limit] 条，避免整段会话驻留内存。 */
+    suspend fun pageRrMs(sessionId: Long, offset: Int, limit: Int): List<Int> =
+        withContext(io) { rrDao.pageRrMs(sessionId, offset, limit) }
+
     suspend fun countRr(sessionId: Long): Int = withContext(io) { rrDao.countBySession(sessionId) }
 
     fun observeRecentRr(sessionId: Long, limit: Int = 5): Flow<List<RrRecord>> =

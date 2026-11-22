@@ -1,9 +1,5 @@
 package com.rrlogger.service
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,16 +7,12 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
-import com.rrlogger.R
 import com.rrlogger.source.HeartRateManager
 import com.rrlogger.source.HeartRateSource
 import com.rrlogger.data.AppDatabase
 import com.rrlogger.data.Label
 import com.rrlogger.data.RrRecord
 import com.rrlogger.data.RrRepository
-import com.rrlogger.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -48,9 +40,6 @@ class RecordingService : Service() {
 
     companion object {
         private const val TAG = "RecordingService"
-        private const val CHANNEL_ID = "rr_recording"
-        private const val CHANNEL_NAME = "心率记录"
-        private const val NOTIF_ID = 4101
 
         const val ACTION_START = "com.rrlogger.action.START"
         const val ACTION_STOP = "com.rrlogger.action.STOP"
@@ -119,6 +108,7 @@ class RecordingService : Service() {
 
     private lateinit var repo: RrRepository
     private lateinit var hr: HeartRateManager
+    private lateinit var notifier: ServiceNotification
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -144,8 +134,9 @@ class RecordingService : Service() {
         val db = AppDatabase.get(this)
         repo = RrRepository(db.sessionDao(), db.rrRecordDao())
         hr = HeartRateManager(this)
+        notifier = ServiceNotification(this) { msg -> emitEvent(msg) }
 
-        createChannel()
+        notifier.createChannel()
         observeAnt()
 
         scope.launch {
@@ -164,7 +155,7 @@ class RecordingService : Service() {
                 scope.launch { stopSession() }
             }
             else -> {
-                startForegroundSafely(buildNotification(recording = _uiState.value.recording))
+                notifier.startForeground(notificationState())
                 scope.launch { ensureRestoredOrIdle() }
             }
         }
@@ -197,7 +188,7 @@ class RecordingService : Service() {
             val id = repo.createSession(label, startMs)
             lockAndResume(id, label, startMs)
             acquireWakeLock()
-            startForegroundSafely(buildNotification(recording = true))
+            notifier.startForeground(notificationState())
             emitEvent("开始记录（#${id} · $label）")
         }
     }
@@ -235,7 +226,7 @@ class RecordingService : Service() {
             hrSum = 0
             hrSamples = 0
 
-            startForegroundSafely(buildNotification(recording = false))
+            notifier.startForeground(notificationState())
             emitEvent("会话已结束：${s.totalBeats} 拍，平均 $avg bpm")
         }
     }
@@ -318,7 +309,7 @@ class RecordingService : Service() {
         hrSum = (session?.avgHr?.toLong() ?: 0L) * existing
         hrSamples = existing
         startCollecting(sessionId)
-        startForegroundSafely(buildNotification(recording = true))
+        notifier.startForeground(notificationState())
         acquireWakeLock()
         if (hr.connState.value !is HeartRateManager.ConnState.Connected) {
             hr.connect()
@@ -332,7 +323,7 @@ class RecordingService : Service() {
         if (unfinished != null) {
             resumeSession(unfinished.id, unfinished.label, unfinished.startTime)
         } else {
-            startForegroundSafely(buildNotification(recording = false))
+            notifier.startForeground(notificationState())
         }
     }
 
@@ -372,7 +363,7 @@ class RecordingService : Service() {
 
                         // 通知内容实时更新（节流：每 5 拍刷一次）
                         if (total % 5 == 0) {
-                            updateNotification()
+                            notifier.update(notificationState())
                         }
                         // 计数定期落库，防进程被杀丢统计（数据本身已逐条落库）
                         if (total % 20 == 0) {
@@ -393,7 +384,7 @@ class RecordingService : Service() {
                     connState = st,
                     antMessage = (st as? HeartRateManager.ConnState.Error)?.reason
                 )
-                updateNotification()
+                notifier.update(notificationState())
             }
         }
         scope.launch {
@@ -416,100 +407,16 @@ class RecordingService : Service() {
 
     // ---------------- 通知与前台 ----------------
 
-    private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NotificationManager::class.java)
-            val ch = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "R-R 间期长期记录"
-                setShowBadge(false)
-            }
-            nm.createNotificationChannel(ch)
-        }
-    }
-
-    private fun buildNotification(recording: Boolean): Notification {
+    /** 把服务的 UI 状态缩成通知需要的字段，具体构建交给 [ServiceNotification]。 */
+    private fun notificationState(): ServiceNotification.State {
         val s = _uiState.value
-        val text = if (recording) {
-            val hrText = if (s.lastHr > 0) "${s.lastHr} bpm" else "-- bpm"
-            "正在记录 · 心率 $hrText · 已记录 ${s.totalBeats} 拍"
-        } else {
-            when (val c = s.connState) {
-                is HeartRateManager.ConnState.Connected -> "设备已连接，等待开始记录"
-                is HeartRateManager.ConnState.Searching -> "正在搜索心率带…"
-                is HeartRateManager.ConnState.Error -> "${s.sourceKind.label} 异常：${c.reason}"
-                else -> "未在记录"
-            }
-        }
-
-        val contentPi = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        return ServiceNotification.State(
+            recording = s.recording,
+            lastHr = s.lastHr,
+            totalBeats = s.totalBeats,
+            connState = s.connState,
+            sourceKind = s.sourceKind
         )
-
-        val stopPi = PendingIntent.getService(
-            this, 1,
-            Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_rr)
-            .setContentTitle(if (recording) "R-R 记录中" else "R-R Logger")
-            .setContentText(text)
-            .setOngoing(recording)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(contentPi)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-
-        if (recording) {
-            builder.addAction(R.drawable.ic_stat_rr, "结束记录", stopPi)
-        }
-        return builder.build()
-    }
-
-    private fun updateNotification() {
-        val nm = getSystemService(NotificationManager::class.java) ?: return
-        try {
-            nm.notify(NOTIF_ID, buildNotification(_uiState.value.recording))
-        } catch (_: Throwable) {
-            // 通知权限被拒时静默
-        }
-    }
-
-    private fun startForegroundSafely(n: Notification) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIF_ID,
-                    n,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-                )
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceCompat.startForeground(
-                    this,
-                    NOTIF_ID,
-                    n,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST
-                )
-            } else {
-                startForeground(NOTIF_ID, n)
-            }
-        } catch (t: Throwable) {
-            // 例如用户拒绝通知权限时 API 34 会抛异常，降级为普通前台
-            try {
-                startForeground(NOTIF_ID, n)
-            } catch (_: Throwable) {
-                emitEvent("前台服务启动失败：${t.message}")
-            }
-        }
     }
 
     // ---------------- WakeLock ----------------

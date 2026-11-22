@@ -40,10 +40,15 @@ object RrCalculator {
         return if (c >= p) c - p else c + TICK_MODULUS - p
     }
 
-    /** 事件时间差值（1/1024s tick）→ 毫秒，向上取整。 */
+    /**
+     * 事件时间差值（1/1024s tick）→ 毫秒，**四舍五入**（不是向上取整）。
+     *
+     * 向上取整会给每个非整数毫秒都加 +1ms（长期均值系统性偏大约 0.5ms），
+     * 与 README「用四舍五入而不是截断」的决策不一致；这里统一为最近整数。
+     */
     fun ticksToMs(diffTicks: Int): Int {
         if (diffTicks <= 0) return 0
-        return ((diffTicks.toLong() * 1000L + TICKS_PER_SECOND - 1) / TICKS_PER_SECOND).toInt()
+        return ((diffTicks.toLong() * 1000L + TICKS_PER_SECOND / 2L) / TICKS_PER_SECOND).toInt()
     }
 
     /**

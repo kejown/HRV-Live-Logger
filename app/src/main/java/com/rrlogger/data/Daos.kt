@@ -69,6 +69,16 @@ interface RrRecordDao {
     @Query("SELECT rrMs FROM rr_records WHERE sessionId = :sessionId ORDER BY timestampMs ASC, id ASC")
     suspend fun listRrBySession(sessionId: Long): List<Int>
 
+    /**
+     * 按窗口分页取 rrMs（导出用）。
+     * 8 小时记录约 29k 拍，分页后导出不再需要把整段会话一次性读进内存。
+     */
+    @Query(
+        "SELECT rrMs FROM rr_records WHERE sessionId = :sessionId " +
+            "ORDER BY timestampMs ASC, id ASC LIMIT :limit OFFSET :offset"
+    )
+    suspend fun pageRrMs(sessionId: Long, offset: Int, limit: Int): List<Int>
+
     @Query("SELECT COUNT(*) FROM rr_records WHERE sessionId = :sessionId")
     suspend fun countBySession(sessionId: Long): Int
 

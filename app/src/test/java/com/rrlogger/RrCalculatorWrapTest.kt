@@ -69,4 +69,34 @@ class RrCalculatorWrapTest {
     fun `one second at 60bpm is 1024 ticks`() {
         assertEquals(1000, RrCalculator.ticksToMs(1024))
     }
+
+    @Test
+    fun `ticks to ms rounds to nearest not ceiling`() {
+        // 1023 tick = 999.02 ms → 999；向上取整会得到 1000。
+        assertEquals(999, RrCalculator.ticksToMs(1023))
+        // 2047 tick = 1999.02 ms → 1999；向上取整会得到 2000。
+        assertEquals(1999, RrCalculator.ticksToMs(2047))
+        // 512 / 1536 tick 正好落在整数毫秒上，任何实现都得这两个值。
+        assertEquals(500, RrCalculator.ticksToMs(512))
+        assertEquals(1500, RrCalculator.ticksToMs(1536))
+    }
+
+    @Test
+    fun `rounding error stays within half a millisecond for every 16 bit diff`() {
+        var maxError = 0.0
+        var worstTicks = 0
+        for (ticks in 1..RrCalculator.TICK_MODULUS - 1) {
+            val exactMs = ticks * 1000.0 / RrCalculator.TICKS_PER_SECOND
+            val error = kotlin.math.abs(RrCalculator.ticksToMs(ticks) - exactMs)
+            if (error > maxError) {
+                maxError = error
+                worstTicks = ticks
+            }
+        }
+        // 最近整数取整的最坏误差是 0.5ms（向上取整会接近 1ms）。
+        assertTrue(
+            "worst rounding error ${maxError}ms at $worstTicks ticks",
+            maxError <= 0.5 + 1e-9
+        )
+    }
 }

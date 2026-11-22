@@ -356,22 +356,24 @@ class MainActivity : AppCompatActivity() {
      * 这比单纯堆一个数字对用户更有用。
      */
     private fun renderQuality(s: RecordingService.UiState) {
-        val raw = s.rawRr
-        if (raw < 20) {
+        // 分级规则在 QualityAdvisor 里，由单测锁定边界；这里只做文案与配色。
+        val verdict = QualityAdvisor.evaluate(s.droppedCount, s.rawRr)
+        if (verdict.level == QualityAdvisor.Level.IDLE) {
             binding.tvQuality.text = getString(R.string.quality_idle)
             binding.tvQuality.setTextColor(ContextCompat.getColor(this, R.color.dim))
             tintDot(binding.dotQuality, R.color.dim)
             return
         }
 
-        val rate = s.droppedCount.toDouble() / raw.toDouble()
-        val pct = String.format(Locale.US, "%.1f%%", rate * 100)
+        val pct = String.format(Locale.US, "%.1f%%", verdict.droppedRate * 100)
 
-        val (text, colorRes) = when {
-            rate < 0.02 -> "数据质量优秀 · 丢弃率 $pct" to R.color.ok
-            rate < 0.05 -> "数据质量良好 · 丢弃率 $pct" to R.color.ok
-            rate < 0.15 -> "有少量异常 · 丢弃率 $pct，留意电极接触" to R.color.warn
-            else -> "异常较多 · 丢弃率 $pct，建议重新佩戴胸带" to R.color.err
+        val (text, colorRes) = when (verdict.level) {
+            QualityAdvisor.Level.EXCELLENT -> "数据质量优秀 · 丢弃率 $pct" to R.color.ok
+            QualityAdvisor.Level.GOOD -> "数据质量良好 · 丢弃率 $pct" to R.color.ok
+            QualityAdvisor.Level.FAIR -> "有少量异常 · 丢弃率 $pct，留意电极接触" to R.color.warn
+            // IDLE 已在上面提前返回；保留分支只为穷尽 when。
+            QualityAdvisor.Level.POOR, QualityAdvisor.Level.IDLE ->
+                "异常较多 · 丢弃率 $pct，建议重新佩戴胸带" to R.color.err
         }
         binding.tvQuality.text = text
         binding.tvQuality.setTextColor(ContextCompat.getColor(this, colorRes))

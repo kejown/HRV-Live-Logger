@@ -1,5 +1,11 @@
 # PC 端接手说明（PC-HANDOFF）
 
+> **v5 提示（2026-11-22）**：本目录已按第 5 节的低风险项做过一轮 PC 静态优化——
+> 单元测试 70 → **79**（0 失败），lint 仍为 **0 error / 16 warning**，通知拆到
+> `service/ServiceNotification.kt`，导出改为分页流式写入。改动、验证记录与"仍未做/需真机"
+> 清单见 [CHANGES-v5.md](CHANGES-v5.md) 和 [VERSIONS.md](VERSIONS.md)。
+> 下文描述的 v4 状态与设计不变量仍然有效。
+
 这份文档是给**在 PC 上继续优化这个工程的人 / dsh 会话**看的。
 手机端（aarch64 容器）已经交付并验收完毕，PC 端接手只需要看这一份。
 

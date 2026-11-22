@@ -32,7 +32,8 @@ cp /root/RRLogger_v5_<主题>/app/build/outputs/apk/debug/app-debug.apk \
 | v1 | 纯 ANT+（反射驱动 antpluginlib 3.9.0），Page 4 逐拍，Room，Kubios 导出 | 27 | **已丢失**（被覆盖） |
 | v2 | 加 BLE 双协议（0x180D / 0x2A37），运行时切换 | 57 | **已丢失**（被覆盖） |
 | v3 | 加 RR 单位自动判定（tick / 毫秒）+ 连接优先级优化 | 70 | **已丢失**（被覆盖） |
-| **v4** | 新 UI：大心率主卡、RR 实时曲线、数据质量提示、按钮分层 | 70 | **当前**，已存档 |
+| **v4** | 新 UI：大心率主卡、RR 实时曲线、数据质量提示、按钮分层 | 70 | 已存档，是 v5 的基线 |
+| **v5** | PC 静态优化：导出改流式分页、tick→ms 取整修正、质量分级抽纯函数、版本目录、通知拆分 | 79 | **当前**（PC 构建/测试/lint 通过，待真机复测） |
 
 > v1–v3 的丢失是覆盖式迭代的直接后果。从 v4 起按上面的流程留档。
 
@@ -185,3 +186,62 @@ Android 手机，PC 只是构建主机。** r2 补上这层定位，并划清验
 /root/RRLogger_versions/v4_pc_package_r2_src.tar.gz
 /root/RRLogger_versions/v4_pc_package_r2.zip
 ```
+
+---
+
+## v5（PC 静态优化，2026-11-22）
+
+**基线**：`RRLogger_pc_v4_r2/RRLogger`（v4 源码，代码零改动）。
+**工作目录**：`RRLogger_v5_pc_opt/`，从 v4 复制后修改，v4 目录未动。
+**PC 验收**：79 个单元测试 0 失败 / lint 0 error、16 warning / `app-debug.apk` 6.29 MB。
+
+改动只碰纯逻辑、导出、构建配置与结构拆分，**未改**协议层、服务采集逻辑、数据库 schema、
+权限与清单，也没有引入任何桌面/跨平台目标。
+
+| # | 改动 | 文件 | 为什么 |
+|---|---|---|---|
+| 1 | 导出改成分页读取 + `BufferedWriter` 逐行写 | `export/RrExporter.kt`、`data/Daos.kt`、`data/RrRepository.kt` | v4 先拼一个完整 String 再整体写出；8 小时记录约 29k 行，分页后峰值内存与记录时长无关。失败时删除 MediaStore 的 pending 残件 |
+| 2 | `ticksToMs` 从向上取整改为四舍五入 | `ant/RrCalculator.kt` | README 明确写的是"四舍五入而不是截断"，v4 实现是 ceiling，每个非整数毫秒多 +1ms（长期均值偏大约 0.5ms）。新增两条测试锁死取整语义与全量误差上限（≤0.5ms） |
+| 3 | 数据质量分级抽成纯函数 | 新增 `ui/QualityAdvisor.kt`、`QualityAdvisorTest.kt`；`ui/MainActivity.kt` 只做文案/配色 | 阈值（2%/5%/15%、最少 20 样本）原本藏在 Activity 里无法单测，现在 7 条边界测试覆盖 |
+| 4 | 依赖版本集中到 Version Catalog | 新增 `gradle/libs.versions.toml`；`build.gradle.kts`、`app/build.gradle.kts` | 版本号原先散落在两个构建文件里；版本号本身一个都没改 |
+| 5 | 通知构建/更新/前台启动拆出服务 | 新增 `service/ServiceNotification.kt`；`RecordingService.kt` 从 545 行降到约 440 行 | 服务不再同时管通知通道、PendingIntent、文案与前台降级；通知文案与 v4 完全一致 |
+
+测试数从 70 → 79：`RrCalculatorWrapTest` +2（取整语义、全量误差上限），
+`QualityAdvisorTest` +7（样本量下限与 2%/5%/15% 边界两侧）。
+
+### 本机 PC 构建注意（Windows）
+
+这台机器的 `C:\Users\<user>` 目录对 `java.exe` 写入受限（PowerShell 可写、JVM 报
+`AccessDeniedException`），因此需要把 JVM 临时目录指到工作区：
+
+```powershell
+$env:JAVA_HOME   = "E:\dsh workspace\.tools\jdk17\jdk-17.0.21.1+2"
+$env:ANDROID_HOME = "E:\dsh workspace\.tools\android-sdk"
+$env:ANDROID_USER_HOME = "E:\dsh workspace\.tools\android-home"   # 调试签名与 analytics
+$env:GRADLE_USER_HOME  = "E:\dsh workspace\.tools\gradle-home"
+$env:JAVA_TOOL_OPTIONS = '-Djava.io.tmpdir="E:\dsh workspace\.tools\tmp"'
+```
+
+`ANDROID_USER_HOME` 决定 debug keystore 的位置（否则 AGP 会去写
+`C:\Users\<user>\.android\debug.keystore` 并失败）。这些是**机器相关**的绕行，
+不属于工程改动，换机器时按常规 `pc-setup.sh` 即可。
+
+### v5 明确没有做
+
+| 项 | 原因 |
+|---|---|
+| 打开 R8 / resource shrinking | 反射驱动 ANT+ SDK 是关键路径，必须真机验证混淆后的反射调用，PC 上只能证明能编译 |
+| BLE 重连指数退避 | 涉及连接状态机，必须真机测断连/重连 |
+| `MainActivity` 权限/绑定/回调三分 | 纯结构重排但无测试兜底，本轮先做有测试覆盖的质量分级抽取；建议真机在手时再做 |
+| Room `synchronous=FULL`、逐拍入库、300..2000ms 边界 | 设计不变量，不动 |
+
+### 仍需真机验收（第二级）
+
+1. BLE 心率带能连、UI 心率每秒刷新；
+2. 退后台 30 分钟不断、拍数连续；
+3. `am force-stop` 后重开数据完整恢复；
+4. 导出 txt 在 Kubios 导入成功，且每行仍是单个整数毫秒。
+
+导出接口这次从 `listRrMs` 改成 `pageRrMs`，**第 4 项必须重测**——分页顺序与 v4 的
+`ORDER BY timestampMs ASC, id ASC` 完全一致，但只有真机能确认文件内容没有被截断或重复。
+
