@@ -13,6 +13,8 @@ import com.rrlogger.data.AppDatabase
 import com.rrlogger.data.Label
 import com.rrlogger.data.RrRecord
 import com.rrlogger.data.RrRepository
+import com.rrlogger.hrv.HrvCalculator
+import com.rrlogger.hrv.HrvMetrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,6 +43,9 @@ class RecordingService : Service() {
 
     companion object {
         private const val TAG = "RecordingService"
+
+        /** 实时 HRV 的滑动窗口长度。 */
+        private const val LIVE_WINDOW_MS = 60_000L
 
         const val ACTION_START = "com.rrlogger.action.START"
         const val ACTION_STOP = "com.rrlogger.action.STOP"
@@ -91,7 +97,10 @@ class RecordingService : Service() {
         val rawRr: Long = 0,
 
         /** 数据源诊断串（BLE 下含 RR 单位判定）。 */
-        val diag: String = ""
+        val diag: String = "",
+
+        /** 最近 60 秒滑窗的 HRV；不可用时为 null。 */
+        val hrv: HrvMetrics? = null
     ) {
         val elapsedMs: Long get() = if (sessionStartMs > 0 && recording)
             System.currentTimeMillis() - sessionStartMs else 0L
@@ -125,6 +134,11 @@ class RecordingService : Service() {
     private var hrSum: Long = 0L
     private var hrSamples: Int = 0
 
+    /** 实时 HRV 的滑动窗口：最近 60 秒的有效拍。 */
+    private val liveBeats = ArrayDeque<LiveBeat>()
+
+    private data class LiveBeat(val timestampMs: Long, val rrMs: Int)
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onCreate() {
@@ -141,14 +155,15 @@ class RecordingService : Service() {
 
         // 未记录时也把实时心率推给界面：只想"打开看一眼心率"的人不必先开记录。
         // 记录期间由 startCollecting 负责推送，这里用 recording 判断避免两边打架。
+        // 同一路数据同时维护 60 秒 HRV 滑窗，界面上的 HRV 卡片与是否记录无关。
         scope.launch {
             hr.beats.collect { beat ->
-                if (!_uiState.value.recording) {
-                    _uiState.value = _uiState.value.copy(
-                        lastRrMs = beat.rrMs,
-                        lastHr = beat.heartRate
-                    )
+                _uiState.update { cur ->
+                    if (cur.recording) cur
+                    else cur.copy(lastRrMs = beat.rrMs, lastHr = beat.heartRate)
                 }
+                appendLiveBeat(beat.timestampMs, beat.rrMs)
+                recomputeLiveHrv()
             }
         }
 
@@ -282,6 +297,7 @@ class RecordingService : Service() {
             if (avail.available) "已切换到 ${kind.label} 模式"
             else "${kind.label} 不可用：${avail.message}"
         )
+        resetLiveWindow()
     }
 
     // ---------------- 内部实现 ----------------
@@ -300,6 +316,7 @@ class RecordingService : Service() {
         )
         hrSum = 0
         hrSamples = 0
+        resetLiveWindow()
         startCollecting(sessionId)
         if (hr.connState.value !is HeartRateManager.ConnState.Connected) {
             hr.connect()
@@ -321,6 +338,7 @@ class RecordingService : Service() {
         )
         hrSum = (session?.avgHr?.toLong() ?: 0L) * existing
         hrSamples = existing
+        resetLiveWindow()
         startCollecting(sessionId)
         notifier.startForeground(notificationState())
         acquireWakeLock()
@@ -358,21 +376,23 @@ class RecordingService : Service() {
                         hrSum += beat.heartRate.toLong()
                         hrSamples += 1
 
-                        val cur = _uiState.value
-                        val total = cur.totalBeats + 1
                         val dropped = hr.stats.value.dropped.toInt()
                         // 整数四舍五入除法（hrSum/hrSamples 都是整型，避免浮点抖动）
                         val avg = if (hrSamples > 0) {
                             ((hrSum + hrSamples / 2L) / hrSamples.toLong()).toInt()
                         } else 0
 
-                        _uiState.value = cur.copy(
-                            totalBeats = total,
-                            droppedCount = dropped,
-                            lastRrMs = beat.rrMs,
-                            lastHr = beat.heartRate,
-                            avgHr = avg
-                        )
+                        var total = 0
+                        _uiState.update { cur ->
+                            total = cur.totalBeats + 1
+                            cur.copy(
+                                totalBeats = total,
+                                droppedCount = dropped,
+                                lastRrMs = beat.rrMs,
+                                lastHr = beat.heartRate,
+                                avgHr = avg
+                            )
+                        }
 
                         // 通知内容实时更新（节流：每 5 拍刷一次）
                         if (total % 5 == 0) {
@@ -390,25 +410,55 @@ class RecordingService : Service() {
         }
     }
 
+    // ---------------- 实时 HRV 滑窗 ----------------
+
+    private fun appendLiveBeat(timestampMs: Long, rrMs: Int) {
+        if (rrMs <= 0) return
+        liveBeats.addLast(LiveBeat(timestampMs, rrMs))
+        val cutoff = timestampMs - LIVE_WINDOW_MS
+        while (liveBeats.isNotEmpty() && liveBeats.first().timestampMs < cutoff) {
+            liveBeats.removeFirst()
+        }
+    }
+
+    private fun recomputeLiveHrv() {
+        if (liveBeats.size < 2) return
+        val rr = ArrayList<Int>(liveBeats.size)
+        for (b in liveBeats) rr += b.rrMs
+        val metrics = HrvCalculator.compute(rr) ?: return
+        _uiState.update { it.copy(hrv = metrics) }
+    }
+
+    /** 新会话/换协议时清空滑窗，避免上一段的数据混进这一段的 HRV。 */
+    private fun resetLiveWindow() {
+        liveBeats.clear()
+        _uiState.update { it.copy(hrv = null) }
+    }
+
     private fun observeAnt() {
         stateJob = scope.launch {
             hr.connState.collect { st ->
-                _uiState.value = _uiState.value.copy(
-                    connState = st,
-                    antMessage = (st as? HeartRateManager.ConnState.Error)?.reason
-                )
+                _uiState.update {
+                    it.copy(
+                        connState = st,
+                        antMessage = (st as? HeartRateManager.ConnState.Error)?.reason
+                    )
+                }
                 notifier.update(notificationState())
             }
         }
         scope.launch {
             hr.stats.collect { s ->
-                val cur = _uiState.value
-                if (cur.droppedCount != s.dropped.toInt() || cur.rawRr != s.rawRr) {
-                    _uiState.value = cur.copy(
-                        rawRr = s.rawRr,
-                        droppedCount = s.dropped.toInt(),
-                        diag = hr.diagnostic()
-                    )
+                _uiState.update { cur ->
+                    if (cur.droppedCount != s.dropped.toInt() || cur.rawRr != s.rawRr) {
+                        cur.copy(
+                            rawRr = s.rawRr,
+                            droppedCount = s.dropped.toInt(),
+                            diag = hr.diagnostic()
+                        )
+                    } else {
+                        cur
+                    }
                 }
             }
         }

@@ -28,6 +28,7 @@ import com.rrlogger.R
 import com.rrlogger.data.Label
 import com.rrlogger.data.Session
 import com.rrlogger.databinding.ActivityMainBinding
+import com.rrlogger.hrv.HrvMetrics
 import com.rrlogger.service.RecordingService
 import com.rrlogger.source.HeartRateManager
 import com.rrlogger.source.HeartRateSource
@@ -56,6 +57,10 @@ class MainActivity : AppCompatActivity() {
     /** 专注模式与"最近拍数"展开状态。专注模式持久化，展开状态只在本次界面内有效。 */
     private var focusMode = false
     private var recentExpanded = false
+
+    /** 停止记录后弹一次 HRV 摘要；用 sessionId 去重，避免重复弹窗。 */
+    private var wasRecording = false
+    private var hrvSummaryShownFor: Long? = null
 
     /** 数据质量呼吸灯；只在"优秀/良好"时运行，避免整屏都在闪。 */
     private var qualityPulse: ObjectAnimator? = null
@@ -336,9 +341,26 @@ class MainActivity : AppCompatActivity() {
         }
         val items = sessions.map { s -> describe(s) }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("会话列表（点选导出）")
+            .setTitle("会话列表")
             .setItems(items) { _, which ->
-                vm.exportSession(sessions[which])
+                showSessionActions(sessions[which])
+            }
+            .setNeutralButton("关闭", null)
+            .show()
+    }
+
+    /** 历史会话：先选动作，避免"点一下就直接导出"的误触。 */
+    private fun showSessionActions(session: Session) {
+        val actions = arrayOf("导出为 Kubios 文本", "查看 HRV 详情")
+        AlertDialog.Builder(this)
+            .setTitle(describe(session))
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> vm.exportSession(session)
+                    1 -> vm.loadSessionHrv(session.id) { m ->
+                        showHrvMetricsDialog("会话 #${session.id} · ${session.label}", m)
+                    }
+                }
             }
             .setNeutralButton("关闭", null)
             .show()
@@ -559,8 +581,16 @@ class MainActivity : AppCompatActivity() {
         renderQuality(s)
         renderConn(s.connState, st.availability?.message)
         renderRecent(st)
+        renderHrv(s.hrv)
         renderDuration()
         applyKeepScreenOn(s.recording)
+
+        // 记录 → 停止的瞬间弹一次会话 HRV 摘要
+        if (wasRecording && !s.recording && s.sessionId != null && hrvSummaryShownFor != s.sessionId) {
+            hrvSummaryShownFor = s.sessionId
+            showSessionHrv(s.sessionId, s.label)
+        }
+        wasRecording = s.recording
     }
 
     @SuppressLint("SetTextI18n")
@@ -642,6 +672,63 @@ class MainActivity : AppCompatActivity() {
     private fun tintDot(v: View, colorRes: Int) {
         (v.background?.mutate())?.setTint(ContextCompat.getColor(this, colorRes))
     }
+
+    // ---------------- HRV 展示 ----------------
+
+    /** 主界面的 60 秒实时 HRV 卡：样本不足时只显示占位，不给数字。 */
+    private fun renderHrv(hrv: HrvMetrics?) {
+        if (hrv == null || !hrv.reliable) {
+            binding.tvHrvRmssd.text = "—"
+            binding.tvHrvSdnn.text = "—"
+            binding.tvHrvPnn50.text = "—"
+            binding.tvHrvSamples.text =
+                if (hrv == null) "—" else getString(R.string.hrv_samples, hrv.samples)
+            binding.tvHrvHint.visibility = View.VISIBLE
+            binding.tvHrvHint.text = getString(R.string.hrv_insufficient)
+            return
+        }
+        binding.tvHrvRmssd.text = getString(R.string.hrv_unit_ms, format0(hrv.rmssdMs))
+        binding.tvHrvSdnn.text = getString(R.string.hrv_unit_ms, format0(hrv.sdnnMs))
+        binding.tvHrvPnn50.text = getString(R.string.hrv_unit_percent, format0(hrv.pnn50Percent))
+        binding.tvHrvSamples.text = getString(R.string.hrv_samples, hrv.samples)
+        binding.tvHrvHint.visibility = View.GONE
+    }
+
+    private fun showSessionHrv(sessionId: Long, label: String) {
+        vm.loadSessionHrv(sessionId) { metrics ->
+            showHrvMetricsDialog("本会话 HRV · $label", metrics)
+        }
+    }
+
+    private fun showHrvMetricsDialog(title: String, m: HrvMetrics?) {
+        val message = if (m == null || m.samples < 2) {
+            "没有足够的 RR 数据来计算 HRV。"
+        } else buildString {
+            if (!m.reliable) {
+                append("样本不足（少于 20 拍），以下数字仅供参考。\n\n")
+            }
+            append("有效拍数：").append(m.samples).append('\n')
+            append("平均心率：").append(format0(m.meanHrBpm)).append(" bpm\n")
+            append("Mean RR：").append(format1(m.meanRrMs)).append(" ms\n")
+            append("SDNN：").append(format1(m.sdnnMs)).append(" ms\n")
+            append("RMSSD：").append(format1(m.rmssdMs)).append(" ms\n")
+            append("pNN50：").append(format1(m.pnn50Percent)).append("%\n")
+            append("SD1：").append(format1(m.sd1Ms)).append(" ms · SD2：")
+                .append(format1(m.sd2Ms)).append(" ms\n")
+            append("疑似伪影：").append(m.artifactBeats)
+                .append(" 次（相邻变化 >35%，仅统计、不删数据）\n\n")
+            append("非医疗建议；如需伪影校正与频域分析，请用 Kubios。")
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    private fun format0(value: Double): String = String.format(Locale.US, "%.0f", value)
+
+    private fun format1(value: Double): String = String.format(Locale.US, "%.1f", value)
 
     private fun renderRecent(st: MainViewModel.ScreenState) {
         val rows = st.recentRr

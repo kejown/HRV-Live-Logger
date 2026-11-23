@@ -16,7 +16,10 @@ import com.rrlogger.data.RrRecord
 import com.rrlogger.data.RrRepository
 import com.rrlogger.data.Session
 import com.rrlogger.export.RrExporter
+import com.rrlogger.hrv.HrvCalculator
+import com.rrlogger.hrv.HrvMetrics
 import com.rrlogger.service.RecordingService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * UI 的唯一读写入口。UI 只读 [uiState]，不碰业务逻辑。
@@ -233,6 +237,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         exportSession(target)
+    }
+
+    /**
+     * 读取整段会话的 RR，计算 HRV。
+     * 计算在后台线程完成，回调切回主线程；数据只读，不写回记录。
+     */
+    fun loadSessionHrv(sessionId: Long, onLoaded: (HrvMetrics?) -> Unit) {
+        viewModelScope.launch {
+            val rr = repo.listRrMs(sessionId)
+            val metrics = withContext(Dispatchers.Default) { HrvCalculator.compute(rr) }
+            onLoaded(metrics)
+        }
     }
 
     fun deleteSession(session: Session) {

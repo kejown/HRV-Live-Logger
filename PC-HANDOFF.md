@@ -1,5 +1,10 @@
 # PC 端接手说明（PC-HANDOFF）
 
+> **v7 提示（2026-11-23）**：项目显示名改为 **HRV Live Logger**（包名仍是 `com.rrlogger`）。
+> 新增时域 HRV：主界面 60 秒实时卡、停止后会话摘要、历史会话 HRV 详情。
+> 93 个单元测试 0 失败，lint 0 error / 10 warning，versionCode 4 / versionName 2.0。
+> 公式、限制与验证见 [CHANGES-v7.md](CHANGES-v7.md)。
+
 > **v6 提示（2026-11-22）**：本目录已完成 UI 设计文档的 **P0 + P2**——修复"第二段不能开始"、
 > 顶栏/统计降噪、最近拍折叠、专注模式、记录期常亮、未连接可开始。装机后修了专注模式心率不显示、
 > 权限按动作申请、打开即连接并实时显示心率（versionCode 3 / versionName 1.2）。

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">R-R Logger</string>
+    <string name="app_name">HRV Live Logger</string>
 
     <!-- 标题栏 -->
     <string name="conn_idle">未连接</string>
@@ -46,6 +46,16 @@
     <!-- 专注模式 -->
     <string name="focus_exit">退出专注</string>
     <string name="focus_stop">结束</string>
+
+    <!-- HRV 实时卡片 -->
+    <string name="hrv_title">HRV · 最近 60 秒</string>
+    <string name="hrv_samples">n=%1$d</string>
+    <string name="hrv_rmssd">RMSSD</string>
+    <string name="hrv_sdnn">SDNN</string>
+    <string name="hrv_pnn50">pNN50</string>
+    <string name="hrv_insufficient">样本不足：至少 20 拍后显示</string>
+    <string name="hrv_unit_ms">%1$s ms</string>
+    <string name="hrv_unit_percent">%1$s%%</string>
 
     <!-- 通知 -->
     

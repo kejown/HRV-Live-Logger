@@ -34,7 +34,8 @@ cp /root/RRLogger_v5_<主题>/app/build/outputs/apk/debug/app-debug.apk \
 | v3 | 加 RR 单位自动判定（tick / 毫秒）+ 连接优先级优化 | 70 | **已丢失**（被覆盖） |
 | **v4** | 新 UI：大心率主卡、RR 实时曲线、数据质量提示、按钮分层 | 70 | 已存档，是 v5 的基线 |
 | **v5** | PC 静态优化：导出改流式分页、tick→ms 取整修正、质量分级抽纯函数、版本目录、通知拆分 | 79 | 已存档（`main` 分支） |
-| **v6** | P0+P2：修复第二段无法开始、顶栏/统计降噪、最近拍折叠、专注模式、常亮、未连接可开始；装机反馈修复（专注心率/权限/打开即连） | 84 | **当前**（分支 `v6-ui-p0p2`，versionCode 3 / versionName 1.2，待真机视觉验收） |
+| **v6** | P0+P2：修复第二段无法开始、顶栏/统计降噪、最近拍折叠、专注模式、常亮、未连接可开始；装机反馈修复（专注心率/权限/打开即连） | 84 | 已存档（`v6-ui-p0p2`，versionCode 3 / versionName 1.2） |
+| **v7** | 改名 HRV Live Logger；实时 60 秒 HRV 卡、会话 HRV 摘要、历史 HRV 详情（时域 + SD1/SD2） | 93 | **当前**（分支 `v7-hrv`，versionCode 4 / versionName 2.0，待真机） |
 
 > v1–v3 的丢失是覆盖式迭代的直接后果。从 v4 起按上面的流程留档。
 
@@ -264,3 +265,15 @@ $env:JAVA_TOOL_OPTIONS = '-Djava.io.tmpdir="E:\dsh workspace\.tools\tmp"'
 
 分支 `v6-ui-p0p2` 从 `main`（v5）切出，v5 源码与 APK 原样保留。
 
+
+---
+
+## v7（改名 HRV Live Logger + 实时 HRV 评测，2026-11-23）
+
+应用显示名改为 **HRV Live Logger**（包名/applicationId 保持 com.rrlogger，历史数据不受影响），
+新增时域 HRV 引擎、主界面 60 秒实时 HRV 卡、停止后会话摘要、历史会话 HRV 详情。
+详细公式、验证与限制见 [CHANGES-v7.md](CHANGES-v7.md)。
+
+- 只做时域 + Poincaré（SDNN/RMSSD/pNN50/SD1/SD2），不做伪影校正与频域；导出格式不变。
+- 个人基线趋势（D 方案第二阶段）未做。
+- PC 验收：93 测试 0 失败 / lint 0 error、10 warning / APK 约 6.0 MB。

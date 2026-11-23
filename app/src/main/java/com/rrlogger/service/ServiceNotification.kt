@@ -126,7 +126,7 @@ class ServiceNotification(
 
         val builder = NotificationCompat.Builder(service, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_rr)
-            .setContentTitle(if (state.recording) "R-R 记录中" else "R-R Logger")
+            .setContentTitle(if (state.recording) "HRV 记录中" else "HRV Live Logger")
             .setContentText(text)
             .setOngoing(state.recording)
             .setOnlyAlertOnce(true)
@@ -142,7 +142,7 @@ class ServiceNotification(
 
     private companion object {
         const val CHANNEL_ID = "rr_recording"
-        const val CHANNEL_NAME = "心率记录"
+        const val CHANNEL_NAME = "HRV 记录"
         const val NOTIF_ID = 4101
     }
 }
